@@ -9,13 +9,17 @@ CIDR_A=10.19.1.0/24
 CIDR_B=10.19.2.0/24
 APP_PORT=8027
 GREETING=cloudlab
-VM_COUNT=2
-DISK_SIZE=15
+
+VM_COUNT="${1:-2}"
+DISK_SIZE="${2:-15}"
+
 BOOT_SIZE=25
 IMAGE_FAMILY=ubuntu-2404-lts
+
 echo "==> сеть и подсети"
 
-yc vpc network create --name "$PREFIX-net"
+yc vpc network create \
+  --name "$PREFIX-net"
 
 yc vpc subnet create \
   --name "$PREFIX-subnet-a" \
@@ -28,6 +32,7 @@ yc vpc subnet create \
   --network-name "$PREFIX-net" \
   --zone "$ZONE_B" \
   --range "$CIDR_B"
+
 echo "==> файл настройки из шаблона"
 
 SSH_KEY=$(cat ~/.ssh/id_ed25519.pub)
@@ -36,6 +41,15 @@ export APP_PORT GREETING SSH_KEY
 envsubst '${APP_PORT} ${GREETING} ${SSH_KEY}' \
   < work-02/cloud-init.tpl.yaml \
   > work-02/cloud-init.yaml
+
+echo "==> дополнительный диск"
+
+yc compute disk create \
+  --name "$PREFIX-data" \
+  --zone "$ZONE_A" \
+  --size "$DISK_SIZE" \
+  --type network-hdd
+
 echo "==> машины"
 
 ZONES=("$ZONE_A" "$ZONE_B")
@@ -43,6 +57,12 @@ SUBNETS=("$PREFIX-subnet-a" "$PREFIX-subnet-b")
 
 for i in $(seq 1 "$VM_COUNT"); do
   idx=$(( (i - 1) % 2 ))
+
+  DISK_ARGS=()
+
+  if [ "$i" -eq 1 ]; then
+    DISK_ARGS=(--attach-disk "disk-name=$PREFIX-data,device-name=data")
+  fi
 
   yc compute instance create \
     --name "$PREFIX-app-$i" \
@@ -54,21 +74,11 @@ for i in $(seq 1 "$VM_COUNT"); do
     --preemptible \
     --create-boot-disk image-folder-id=standard-images,image-family="$IMAGE_FAMILY",type=network-hdd,size="$BOOT_SIZE" \
     --network-interface subnet-name="${SUBNETS[$idx]}",nat-ip-version=ipv4 \
+    "${DISK_ARGS[@]}" \
     --hostname "$PREFIX-app-$i" \
     --metadata-from-file user-data=work-02/cloud-init.yaml
 done
-echo "==> дополнительный диск"
 
-yc compute disk create \
-  --name "$PREFIX-data" \
-  --zone "$ZONE_A" \
-  --size "$DISK_SIZE" \
-  --type network-hdd
-
-yc compute instance attach-disk "$PREFIX-app-1" \
-  --disk-name "$PREFIX-data" \
-  --device-name data \
-  --auto-delete=false
 echo "==> целевая группа"
 
 TARGETS=""
@@ -85,6 +95,7 @@ done
 yc load-balancer target-group create \
   --name "$PREFIX-tg" \
   $TARGETS
+
 echo "==> балансировщик"
 
 TG_ID=$(yc load-balancer target-group get \

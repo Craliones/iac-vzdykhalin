@@ -19,3 +19,7 @@ runcmd:
   - bash -c 'echo "${GREETING} on $(hostname)" > /var/www/html/index.nginx-debian.html'
   - nginx -t
   - systemctl restart nginx
+  - '[ -b /dev/disk/by-id/virtio-data ] && mkfs.ext4 /dev/disk/by-id/virtio-data || true'
+  - '[ -b /dev/disk/by-id/virtio-data ] && mkdir -p /mnt/data || true'
+  - '[ -b /dev/disk/by-id/virtio-data ] && mount /dev/disk/by-id/virtio-data /mnt/data || true'
+  - '[ -b /dev/disk/by-id/virtio-data ] && echo "/dev/disk/by-id/virtio-data /mnt/data ext4 defaults,nofail 0 2" >> /etc/fstab || true'

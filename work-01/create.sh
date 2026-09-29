@@ -8,6 +8,7 @@ DISK_SIZE=25
 IMAGE_FAMILY=debian-12
 PORT=8027
 WORD=cloudlab
+
 yc vpc network create --name "$PREFIX-net"
 
 yc vpc subnet create \
@@ -15,9 +16,11 @@ yc vpc subnet create \
   --network-name "$PREFIX-net" \
   --zone "$ZONE" \
   --range "$CIDR"
+
 for i in 1 2; do
   yc compute instance create \
     --name "$PREFIX-app-$i" \
+    --hostname "$PREFIX-app-$i" \
     --zone "$ZONE" \
     --platform standard-v3 \
     --cores=2 \

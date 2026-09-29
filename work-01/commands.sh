@@ -2,14 +2,36 @@ export PREFIX=vzdykhalin-09
 export ZONE=ru-central1-d
 export CIDR=10.19.1.0/24
 export DISK_SIZE=25
+
+yc iam service-account create --name "${PREFIX}-sa"
+
+export FOLDER_ID=$(yc config get folder-id)
+
+export SA_ID=$(yc iam service-account get \
+  --name "${PREFIX}-sa" \
+  --format json | jq -r '.id')
+
+yc resource-manager folder add-access-binding "$FOLDER_ID" \
+  --role editor \
+  --subject "serviceAccount:$SA_ID"
+
+mkdir -p ~/.yc-keys
+
+yc iam key create \
+  --service-account-name "${PREFIX}-sa" \
+  --output ~/.yc-keys/${PREFIX}-key.json
+
 yc vpc network create --name "$PREFIX-net"
+
 yc vpc subnet create \
   --name "$PREFIX-subnet" \
   --network-name "$PREFIX-net" \
   --zone "$ZONE" \
   --range "$CIDR"
+
 yc compute instance create \
   --name "$PREFIX-web-1" \
+  --hostname "$PREFIX-web-1" \
   --zone "$ZONE" \
   --platform standard-v3 \
   --cores=2 \
@@ -20,7 +42,9 @@ yc compute instance create \
   --network-interface subnet-name="$PREFIX-subnet",nat-ip-version=ipv4 \
   --ssh-key ~/.ssh/id_ed25519.pub \
   --labels created-by=cli
-yc compute instance list --format json | jq -r '.[] | select(.status != "RUNNING") | .name'
+
+yc compute instance list --format json \
+  | jq -r '.[] | select(.status != "RUNNING") | .name'
 
 yc compute instance delete "$PREFIX-web-1"
 yc compute instance delete "$PREFIX-web-manual"
